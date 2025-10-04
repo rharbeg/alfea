@@ -7,6 +7,7 @@ import copy
 from datetime import UTC, datetime, time as t, timedelta, timezone
 import json
 import logging
+from typing import Any
 
 from aiohttp import ClientSession, ContentTypeError, FormData
 
@@ -61,6 +62,8 @@ class Hub(DataUpdateCoordinator):
         self._create_unknown = False
         self._dump_json = False
         self._devices = []
+        self._raw_devices: dict[int, dict[str, Any]] = {}
+        self._last_raw_setup: list[Any] | None = None
 
         self.online = False
 
@@ -185,6 +188,7 @@ class Hub(DataUpdateCoordinator):
     def update_devices_from_json_data(self, json_data) -> None:
         """Update the devices list."""
 
+        self._last_raw_setup = copy.deepcopy(json_data)
         if self._dump_json:
             with open(
                 self._hass.config.config_dir + "/Cozytouch.json", "w", encoding="utf-8"
@@ -235,6 +239,8 @@ class Hub(DataUpdateCoordinator):
                 self._devices.append(device)
                 deviceIndex = len(self._devices) - 1
 
+            self._raw_devices[remote_device["deviceId"]] = copy.deepcopy(remote_device)
+
             # Only retrieve capabilites from current device
             if self._deviceId == remote_device["deviceId"]:
                 self._devices[deviceIndex]["capabilities"] = copy.deepcopy(
@@ -277,6 +283,11 @@ class Hub(DataUpdateCoordinator):
                             if dev["deviceId"] == self._deviceId:
                                 dev["capabilities"] = copy.deepcopy(json_data)
                                 break
+
+                        if self._deviceId in self._raw_devices:
+                            self._raw_devices[self._deviceId]["capabilities"] = (
+                                copy.deepcopy(json_data)
+                            )
 
                         if (
                             self._timestamp_away_mode_last_change is not None
@@ -415,6 +426,23 @@ class Hub(DataUpdateCoordinator):
                 return defaultIfNotExist
 
         return None
+
+    def get_device_raw_data(self, deviceId: int | None = None) -> dict[str, Any]:
+        """Return last raw data received for a device."""
+        if not deviceId:
+            deviceId = self._deviceId
+
+        if deviceId not in self._raw_devices:
+            return {}
+
+        return copy.deepcopy(self._raw_devices[deviceId])
+
+    def get_last_raw_setup(self) -> list[Any] | None:
+        """Return last raw setup payload received from the hub."""
+        if self._last_raw_setup is None:
+            return None
+
+        return copy.deepcopy(self._last_raw_setup)
 
     async def set_capability_value(self, capabilityId: int, value: str):
         """Set value for a device capability."""
