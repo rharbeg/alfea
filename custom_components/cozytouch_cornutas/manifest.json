@@ -1,5 +1,5 @@
 {
-    "domain": "cozytouch",
+    "domain": "cozytouch_cornutas",
     "name": "Atlantic Cozytouch",
     "codeowners": ["@gduteil"],
     "config_flow": true,

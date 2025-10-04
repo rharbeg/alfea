@@ -25,7 +25,7 @@ More informations about HACS [here](https://hacs.xyz/).
 
 #### Manually
 
-Clone this repository and copy `custom_components/cozytouch` to your Home Assistant config durectory (ex : `config/custom_components/cozytouch`)
+Clone this repository and copy `custom_components/cozytouch_cornutas` to your Home Assistant config directory (ex : `config/custom_components/cozytouch_cornutas`)
 
 Restart Home Assistant.
 
