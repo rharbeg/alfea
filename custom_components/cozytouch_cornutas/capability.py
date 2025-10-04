@@ -1,12 +1,28 @@
 """Atlantic Cozytouch capabilility mapping."""
 
-from homeassistant.const import UnitOfEnergy, UnitOfPressure
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfPressure,
+    UnitOfTemperature,
+)
 
 from .const import CozytouchCapabilityVariableType
 from .model import CozytouchDeviceType
 
 
-def get_capability_infos(modelInfos: dict, capabilityId: int, capabilityValue: str):  # noqa: C901
+def get_capability_infos(
+    modelInfos: dict,
+    capabilityId: int,
+    capabilityValue: str,
+    capability_data: dict[str, Any] | None = None,
+):  # noqa: C901
     """Get capabilities for a device."""
     modelId = modelInfos["modelId"]
 
@@ -764,6 +780,199 @@ def get_capability_infos(modelInfos: dict, capabilityId: int, capabilityValue: s
         capability["category"] = "sensor"
 
     else:
+        generated_capability = _build_capability_from_definition(capability_data)
+        if generated_capability is not None:
+            return generated_capability
+
         return None
 
     return capability
+
+
+def _build_capability_from_definition(
+    capability_data: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Generate a best-effort capability description from raw definition data."""
+
+    if not capability_data or not isinstance(capability_data, dict):
+        return None
+
+    definition = _extract_capability_definition(capability_data)
+
+    label = _extract_first_non_empty(
+        (
+            definition or {},
+            capability_data,
+        ),
+        ("label", "name", "displayName", "description"),
+    )
+
+    if not label:
+        return None
+
+    label = str(label).strip()
+    if not label:
+        return None
+
+    translation_key = _slugify(label)
+
+    capability: dict[str, Any] = {
+        "name": label,
+        "type": "string",
+        "category": "diag",
+        "translation_key": translation_key,
+    }
+
+    icon = _extract_first_non_empty(
+        (
+            definition or {},
+            capability_data,
+        ),
+        ("icon", "iconName", "icon_name"),
+    )
+    if icon:
+        capability["icon"] = icon
+
+    value_type = _extract_first_non_empty(
+        (
+            definition or {},
+            capability_data,
+        ),
+        ("valueType", "valuetype", "type", "dataType"),
+    )
+
+    unit = _extract_first_non_empty(
+        (
+            definition or {},
+            capability_data,
+        ),
+        (
+            "unit",
+            "unitLabel",
+            "displayedUnit",
+            "unitSymbol",
+            "uom",
+            "displayUnit",
+        ),
+    )
+
+    if unit:
+        unit = str(unit)
+        sensor_type, hass_unit = _map_unit(unit)
+        if sensor_type:
+            capability["type"] = sensor_type
+            capability["category"] = "sensor"
+        if hass_unit:
+            capability["displayed_unit_of_measurement"] = hass_unit
+        else:
+            capability["displayed_unit_of_measurement"] = unit
+
+    if value_type:
+        _apply_value_type(capability, str(value_type))
+
+    return capability
+
+
+def _slugify(value: str) -> str:
+    """Convert a label to a slug that can be used as translation key."""
+
+    value = value.lower()
+    value = re.sub(r"[^0-9a-z]+", "_", value)
+    value = value.strip("_")
+    if not value:
+        return "capability"
+    return value
+
+
+def _extract_capability_definition(
+    capability_data: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Return the capability definition section if present."""
+
+    for key in (
+        "definition",
+        "capabilityDefinition",
+        "capability_definition",
+        "capabilityDefinitionDTO",
+        "capabilityDefinitionDto",
+    ):
+        definition = capability_data.get(key)
+        if isinstance(definition, dict):
+            return definition
+
+    return None
+
+
+def _extract_first_non_empty(
+    containers: tuple[dict[str, Any], ...],
+    keys: tuple[str, ...],
+) -> Any:
+    """Return the first non-empty value for the provided keys."""
+
+    for container in containers:
+        if not container:
+            continue
+        for key in keys:
+            value = container.get(key)
+            if value not in (None, ""):
+                return value
+    return None
+
+
+def _map_unit(unit: str) -> tuple[str | None, str | None]:
+    """Map a unit string to a sensor type and HA unit."""
+
+    normalized = unit.strip().lower()
+    if normalized in {"°c", "c", "celsius"}:
+        return "temperature", UnitOfTemperature.CELSIUS
+    if normalized in {"°f", "f", "fahrenheit"}:
+        return "temperature", "°F"
+    if normalized in {"bar"}:
+        return "pressure", UnitOfPressure.BAR
+    if normalized in {"kwh"}:
+        return "energy", UnitOfEnergy.KILO_WATT_HOUR
+    if normalized in {"wh"}:
+        return "energy", UnitOfEnergy.WATT_HOUR
+    if normalized in {"mwh"}:
+        return "energy", "MWh"
+    if normalized in {"w"}:
+        return "power", UnitOfPower.WATT
+    if normalized in {"kw"}:
+        return "power", UnitOfPower.KILO_WATT
+    if normalized in {"%", "percent", "percentage"}:
+        return "int", PERCENTAGE
+    if normalized in {"l", "litre", "liter", "liters", "litres"}:
+        return "volume", "L"
+
+    return None, None
+
+
+def _apply_value_type(capability: dict[str, Any], value_type: str) -> None:
+    """Update capability metadata based on the reported value type."""
+
+    vt = value_type.lower()
+
+    if vt in {"boolean", "bool"}:
+        capability["type"] = "binary"
+        capability["category"] = "sensor"
+        capability["value_type"] = CozytouchCapabilityVariableType.BOOL
+        return
+
+    if vt in {"integer", "int", "long"}:
+        capability["type"] = "int"
+        capability["value_type"] = CozytouchCapabilityVariableType.INT
+        return
+
+    if vt in {"float", "double", "decimal", "number"}:
+        capability["type"] = "string"
+        capability["value_type"] = CozytouchCapabilityVariableType.FLOAT
+        return
+
+    if vt in {"array", "list"}:
+        capability["type"] = "string"
+        capability["value_type"] = CozytouchCapabilityVariableType.ARRAY
+        return
+
+    if vt in {"datetime", "date", "time"}:
+        capability["type"] = "time"
+        capability["category"] = "diag"
