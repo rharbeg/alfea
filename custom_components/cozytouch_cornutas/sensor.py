@@ -366,7 +366,7 @@ class CozytouchSensor(SensorEntity, CoordinatorEntity):
                 return float(value)
             if self._value_type == CozytouchCapabilityVariableType.INT:
                 return int(value)
-        except ValueError:
+        except (TypeError, ValueError):
             return value
 
         return value
@@ -798,6 +798,7 @@ class CozytouchRawDeviceSensor(CoordinatorEntity, SensorEntity):
     _attr_should_poll = False
     _attr_icon = "mdi:code-json"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _MAX_CAPABILITY_IDS = 64
 
     def __init__(
         self,
@@ -839,16 +840,48 @@ class CozytouchRawDeviceSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the full raw payload as attributes."""
-        attributes: dict[str, Any] = {}
+        """Expose diagnostic metadata without exceeding attribute limits."""
+        attributes: dict[str, Any] = {
+            "device_id": self._device_id,
+            "diagnostics_available": True,
+            "capability_count": 0,
+        }
 
         raw_device = self.coordinator.get_device_raw_data(self._device_id)
         if raw_device:
-            attributes["device"] = raw_device
+            capabilities = raw_device.get("capabilities")
+            if isinstance(capabilities, list):
+                capability_ids = [
+                    capability.get("capabilityId")
+                    for capability in capabilities
+                    if isinstance(capability, dict) and "capabilityId" in capability
+                ]
+
+                capability_count = len(capability_ids)
+                attributes["capability_count"] = capability_count
+
+                if capability_count:
+                    if len(capability_ids) > self._MAX_CAPABILITY_IDS:
+                        attributes["capability_ids_sample"] = capability_ids[
+                            : self._MAX_CAPABILITY_IDS
+                        ]
+                        attributes["capability_ids_omitted"] = (
+                            len(capability_ids) - self._MAX_CAPABILITY_IDS
+                        )
+                    else:
+                        attributes["capability_ids"] = capability_ids
+
+            for key in ("label", "lastUpdateTime", "lastSeen"):
+                if key in raw_device:
+                    attributes[key] = raw_device[key]
 
         raw_setup = self.coordinator.get_last_raw_setup()
-        if raw_setup:
-            attributes["setup"] = raw_setup
+        if raw_setup and isinstance(raw_setup, list) and raw_setup:
+            setup_info = raw_setup[0]
+            if isinstance(setup_info, dict):
+                for key in ("id", "name", "timeZone"):
+                    if key in setup_info:
+                        attributes[f"setup_{key}"] = setup_info[key]
 
         return attributes
 
