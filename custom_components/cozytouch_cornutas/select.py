@@ -92,13 +92,32 @@ class CozytouchSelect(SelectEntity, CozytouchSensor):
                 await self.coordinator.async_request_refresh()
                 break
 
-    def get_value(self) -> str:
+    def get_value(self) -> str | None:
         """Retrieve value from hub."""
-        try:
-            value = int(
-                self.coordinator.get_capability_value(self._capability["capabilityId"])
-            )
-            if value in self._list:
-                self.current_option = self._list[value]
-        except ValueError:
-            return
+        raw_value = self.coordinator.get_capability_value(
+            self._capability["capabilityId"],
+        )
+
+        if raw_value is None:
+            return None
+
+        if isinstance(raw_value, (int, float)):
+            value = int(raw_value)
+        elif isinstance(raw_value, str):
+            raw_value = raw_value.strip()
+            if not raw_value:
+                return None
+
+            if raw_value.isdigit() or (
+                raw_value.startswith(('-', '+')) and raw_value[1:].isdigit()
+            ):
+                value = int(raw_value)
+            else:
+                return None
+        else:
+            return None
+
+        if value in self._list:
+            self.current_option = self._list[value]
+
+        return self.current_option

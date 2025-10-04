@@ -107,24 +107,28 @@ def get_capability_infos(modelInfos: dict, capabilityId: int, capabilityValue: s
         capability["type"] = "int"
         capability["category"] = "diag"
         capability["icon"] = "mdi:water-pump"
+        capability["value_type"] = CozytouchCapabilityVariableType.INT
 
     elif capabilityId == 26:
         capability["name"] = "number_of_starts_dhw_pump"
         capability["type"] = "int"
         capability["category"] = "diag"
         capability["icon"] = "mdi:water-pump"
+        capability["value_type"] = CozytouchCapabilityVariableType.INT
 
     elif capabilityId == 28:
         capability["name"] = "number_of_hours_ch_pump"
         capability["type"] = "int"
         capability["category"] = "diag"
         capability["icon"] = "mdi:water-pump"
+        capability["value_type"] = CozytouchCapabilityVariableType.INT
 
     elif capabilityId == 29:
         capability["name"] = "number_of_hours_dhw_pump"
         capability["type"] = "int"
         capability["category"] = "diag"
         capability["icon"] = "mdi:water-pump"
+        capability["value_type"] = CozytouchCapabilityVariableType.INT
 
     elif capabilityId == 40:
         capability["name"] = "target_temperature"
@@ -611,12 +615,14 @@ def get_capability_infos(modelInfos: dict, capabilityId: int, capabilityValue: s
         capability["type"] = "int"
         capability["category"] = "diag"
         capability["icon"] = "mdi:fire"
+        capability["value_type"] = CozytouchCapabilityVariableType.INT
 
     elif capabilityId == 100406:
         capability["name"] = "number_of_starts_burner"
         capability["type"] = "int"
         capability["category"] = "diag"
         capability["icon"] = "mdi:fire"
+        capability["value_type"] = CozytouchCapabilityVariableType.INT
 
     elif capabilityId == 100505:
         capability["name"] = "powerful_mode"

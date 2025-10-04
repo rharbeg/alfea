@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.components.sensor import (
@@ -272,6 +273,15 @@ async def async_setup_entry(
                 )
             )
 
+    sensors.append(
+        CozytouchRawDeviceSensor(
+            config_title=config_entry.title,
+            config_uniq_id=config_entry.entry_id,
+            coordinator=hub,
+            device_id=config_entry.data["deviceId"],
+        )
+    )
+
     # Add the entities to HA
     if len(sensors) > 0:
         async_add_entities(sensors, True)
@@ -356,7 +366,7 @@ class CozytouchSensor(SensorEntity, CoordinatorEntity):
                 return float(value)
             if self._value_type == CozytouchCapabilityVariableType.INT:
                 return int(value)
-        except ValueError:
+        except (TypeError, ValueError):
             return value
 
         return value
@@ -779,3 +789,115 @@ class CozytouchProgTimeSensor(CozytouchSensor):
             return strValue
 
         return None
+
+
+class CozytouchRawDeviceSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic sensor exposing the raw payload received from the hub."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:code-json"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _MAX_CAPABILITY_IDS = 64
+
+    def __init__(
+        self,
+        coordinator: Hub,
+        config_title: str,
+        config_uniq_id: str,
+        device_id: int,
+    ) -> None:
+        """Initialize the raw device sensor."""
+        super().__init__(coordinator)
+        self._config_title = config_title
+        self._config_uniq_id = config_uniq_id
+        self._device_id = device_id
+        self._device_uniq_id = config_uniq_id
+        self._attr_unique_id = f"{DOMAIN}_{config_uniq_id}_raw_data"
+        self.entity_description = SensorEntityDescription(
+            key="raw_device_data",
+            name="raw_device_data",
+        )
+        self._attr_translation_key = "raw_device_data"
+
+    @property
+    def available(self) -> bool:
+        """Return if hub is online."""
+        return self.coordinator.online
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the number of capabilities reported by the hub."""
+        raw_device = self.coordinator.get_device_raw_data(self._device_id)
+        if not raw_device:
+            return None
+
+        capabilities = raw_device.get("capabilities")
+        if isinstance(capabilities, list):
+            return len(capabilities)
+
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose diagnostic metadata without exceeding attribute limits."""
+        attributes: dict[str, Any] = {
+            "device_id": self._device_id,
+            "diagnostics_available": True,
+            "capability_count": 0,
+        }
+
+        raw_device = self.coordinator.get_device_raw_data(self._device_id)
+        if raw_device:
+            capabilities = raw_device.get("capabilities")
+            if isinstance(capabilities, list):
+                capability_ids = [
+                    capability.get("capabilityId")
+                    for capability in capabilities
+                    if isinstance(capability, dict) and "capabilityId" in capability
+                ]
+
+                capability_count = len(capability_ids)
+                attributes["capability_count"] = capability_count
+
+                if capability_count:
+                    if len(capability_ids) > self._MAX_CAPABILITY_IDS:
+                        attributes["capability_ids_sample"] = capability_ids[
+                            : self._MAX_CAPABILITY_IDS
+                        ]
+                        attributes["capability_ids_omitted"] = (
+                            len(capability_ids) - self._MAX_CAPABILITY_IDS
+                        )
+                    else:
+                        attributes["capability_ids"] = capability_ids
+
+            for key in ("label", "lastUpdateTime", "lastSeen"):
+                if key in raw_device:
+                    attributes[key] = raw_device[key]
+
+        raw_setup = self.coordinator.get_last_raw_setup()
+        if raw_setup and isinstance(raw_setup, list) and raw_setup:
+            setup_info = raw_setup[0]
+            if isinstance(setup_info, dict):
+                for key in ("id", "name", "timeZone"):
+                    if key in setup_info:
+                        attributes[f"setup_{key}"] = setup_info[key]
+
+        return attributes
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        modelInfos = self.coordinator.get_model_infos(self._device_id)
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._device_uniq_id)},
+            manufacturer="Atlantic",
+            name=modelInfos["name"],
+            model=modelInfos["name"],
+            serial_number=self.coordinator.get_serial_number(self._device_id),
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update state when coordinator refreshes."""
+        self.async_write_ha_state()
