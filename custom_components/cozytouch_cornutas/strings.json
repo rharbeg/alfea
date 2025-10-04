@@ -242,6 +242,7 @@
             "prog_mode":                { "name": "Prog Mode" },
             "quiet_mode":               { "name": "Quiet Mode" },
             "radio_signal":             { "name": "Radio Signal" },
+            "raw_device_data":          { "name": "Raw device data" },
             "resistance":               { "name": "Resistance" },
             "serial_number":            { "name": "Serial Number" },
             "swing_mode":               { "name": "Swing Mode" },
