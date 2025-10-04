@@ -17,7 +17,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .capability import get_capability_infos
-from .const import COZYTOUCH_ATLANTIC_API, COZYTOUCH_CLIENT_ID
+from .const import COZYTOUCH_ATLANTIC_API, COZYTOUCH_CLIENT_ID, DOMAIN
 from .model import get_model_infos
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class Hub(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name="Cozytouch_" + str(deviceId),
+            name=f"{DOMAIN}_{deviceId}",
             update_interval=timedelta(seconds=10),
         )
         self._session = ClientSession()
@@ -57,7 +57,7 @@ class Hub(DataUpdateCoordinator):
         self._deviceId = deviceId
         self._zoneId = -1
         self._access_token = ""
-        self._id = "cozytouch." + username.lower()
+        self._id = f"{DOMAIN}.{username.lower()}"
         self._create_unknown = False
         self._dump_json = False
         self._devices = []
@@ -68,7 +68,7 @@ class Hub(DataUpdateCoordinator):
         if "name" in modelInfos:
             self.device_info = DeviceInfo(
                 entry_type=DeviceEntryType.SERVICE,
-                identifiers={("cozytouch", "cozytouch" + str(deviceId))},
+                identifiers={(DOMAIN, f"{DOMAIN}{deviceId}")},
                 manufacturer="Atlantic",
                 name=modelInfos["name"],
             )
@@ -81,7 +81,7 @@ class Hub(DataUpdateCoordinator):
             self._dump_json = False
             self.online = True
             with open(
-                self._hass.config.config_dir + "/cozytouch_eoras2.json",
+                self._hass.config.config_dir + f"/{DOMAIN}_eoras2.json",
                 encoding="utf-8",
             ) as json_file:
                 file_contents = json_file.read()
