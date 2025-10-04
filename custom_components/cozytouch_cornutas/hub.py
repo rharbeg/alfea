@@ -390,6 +390,7 @@ class Hub(DataUpdateCoordinator):
                         modelInfos,
                         capability["capabilityId"],
                         capability["value"],
+                        capability,
                     )
 
                     if capability_infos is None and self._create_unknown:
@@ -408,10 +409,16 @@ class Hub(DataUpdateCoordinator):
         return capabilities
 
     def get_capability_infos(
-        self, modelId: int, capabilityId: int, capabilityValue: str
+        self,
+        modelId: int,
+        capabilityId: int,
+        capabilityValue: str,
+        capability_data: dict[str, Any] | None = None,
     ):
         """Get capability infos."""
-        return get_capability_infos(modelId, capabilityId, capabilityValue)
+        return get_capability_infos(
+            modelId, capabilityId, capabilityValue, capability_data
+        )
 
     def get_capability_value(
         self, capabilityId: int, defaultIfNotExist: str | None = "0"
